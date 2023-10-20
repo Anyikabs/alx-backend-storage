@@ -15,37 +15,40 @@ Tip: Use http://slowwly.robertomurray.co.uk to simulate
 a slow response and test your caching."""
 
 
-import requests
 import redis
+import requests
 from functools import wraps
 
-store = redis.Redis()
+r = redis.Redis()
 
-def count_url_access(method):
+
+def url_access_count(method):
+    """decorator for get_page function"""
     @wraps(method)
     def wrapper(url):
-        cached_key = "cached:" + url
-        cached_data = store.get(cached_key)
-        if cached_data:
-            return cached_data.decode("utf-8")
+        """wrapper function"""
+        key = "cached:" + url
+        cached_value = r.get(key)
+        if cached_value:
+            return cached_value.decode("utf-8")
 
-        count_key = "count:" + url
-        count = store.get(count_key)
-        if count is None:
-            store.set(count_key, 1, ex=10)  # Initialize count to 1 and set a 10-second expiration
+            # Get new content and update cache
+        key_count = "count:" + url
+        html_content = method(url)
 
-        html = method(url)
-
-        store.incr(count_key)  # Increment the access count
-        store.set(cached_key, html)
-        store.expire(cached_key, 10)
-
-        return html
-
+        r.incr(key_count)
+        r.set(key, html_content, ex=10)
+        r.expire(key, 10)
+        return html_content
     return wrapper
 
-@count_url_access
-def get_page(url: str) -> str:
-    res = requests.get(url)
-    return res.text
 
+@url_access_count
+def get_page(url: str) -> str:
+    """obtain the HTML content of a particular"""
+    results = requests.get(url)
+    return results.text
+
+
+if __name__ == "__main__":
+    get_page('http://slowwly.robertomurray.co.uk')
